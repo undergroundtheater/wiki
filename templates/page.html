@@ -1,5 +1,17 @@
 {% extends "base.html" %}
 
+
+{% block extra_nav %} 
+
+{% if locked %}
+<li><a href="{{ url_for('unlock', url=page.url) }}">Unlock Page</a></li>
+<li class="divider-vertical"></li>
+{% else %}
+<li><a href="{{ url_for('lock', url=page.url) }}">Lock Page</a></li>
+<li class="divider-vertical"></li>
+{% endif %}
+
+{% endblock extra_nav %} 
 {% block title %}
 	{{ page.title }}
 {% endblock title %}

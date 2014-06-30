@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %}User Administration{% endblock title %}
+
+{% block content %}
+
+{% if users %}
+<table class="table">
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>Roles</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+{% for user in users %}
+{% if user.name in protected_users %}
+<tr>
+    <td><a href="#">{{ user.name }}</a></td>
+    <td>{{ user.roles()|join(', ') }}</td>
+    <td>Super User</a></td>
+</tr>
+{% else %}
+<tr>
+    <td><a href="#">{{ user.name }}</a></td>
+    <td>{{ user.roles()|join(', ') }}</td>
+    <td><a href="{{ url_for('user_delete', user_id=user.name) }}" class="btn btn-mini btn-danger">Delete User</a></td>
+</tr>
+{% endif %}
+{% endfor %}
+</tbody>
+</table>
+{% endif %}
+{% endblock content %}
+
+{% block sidebar %}
+<ul class="nav nav-tabs nav-stacked">
+    <li><a href="{{ url_for('user_create') }}">New User</a></li>
+</ul>
+{% endblock sidebar %}

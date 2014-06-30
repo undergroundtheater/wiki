@@ -22,6 +22,16 @@
 								<li class="divider-vertical"></li>
 								<li><a href="{{ url_for('create') }}">New Page</a></li>
 								<li class="divider-vertical"></li>
+
+{% if current_user.is_anonymous() %}
+{% else %}
+{% if current_user.is_admin() %}
+								<li><a href="{{ url_for('user_index') }}">Admin</a></li>
+								<li class="divider-vertical"></li>
+{% endif %}
+{% endif %}
+{% block extra_nav %}
+{% endblock extra_nav %}
 								<li></li>
 							</ul>
 

@@ -8,7 +8,7 @@ from functools import wraps
 from flask import (Flask, render_template, flash, redirect, url_for, request,
                    abort)
 from flask.ext.wtf import Form
-from wtforms import (TextField, TextAreaField, PasswordField)
+from wtforms import (TextField, TextAreaField, PasswordField, BooleanField)
 from wtforms.validators import (InputRequired, ValidationError)
 from flask.ext.login import (LoginManager, login_required, current_user,
                              login_user, logout_user)
@@ -184,6 +184,65 @@ class Page(object):
 class Wiki(object):
     def __init__(self, root):
         self.root = root
+        self.lock_file = os.path.join(self.root, 'locked.json')
+
+        try:
+            if not os.path.exists(self.lock_file):
+                self.locked = {}
+            with open(self.file) as f:
+                self.locked = json.loads(f.read())
+        except:
+            self.locked = {} 
+
+    def write_locks(self):
+        with open(self.lock_file, 'w') as f:
+            f.write(json.dumps(self.locked, indent=2))
+
+    def is_locked(self, url):
+        path = self.path(url)
+        return path in self.locked
+
+    def can_edit(self, url, user):
+        path = self.path(url)
+
+        if self.is_locked(url):
+            for role in self.locked[path]:
+                if role in user.roles():
+                    return True
+
+            return False
+
+        return True
+
+    def add_lock(self, url, role):
+        path = self.path(url)
+
+        if path in self.locked:
+            if role in self.locked[path]:
+                return True
+
+            self.locked[path].append(role)
+        else:
+            self.locked[path] = [role]
+
+        return self.write_locks()
+
+    def del_lock(self, url, role):
+        path = self.path(url)
+
+        if path in self.locked:
+            if role in self.locked[path]:
+                self.locked[path] = filter(
+                        lambda a: a != role,
+                        self.locked[path])
+                if len(self.locked[path]) == 0:
+                    del(self.locked[path])
+                self.write_locks()
+                return True
+
+            return True
+
+        return False
 
     def path(self, url):
         return os.path.join(self.root, url + '.md')
@@ -352,7 +411,7 @@ class UserManager(object):
 
     def update(self, name, userdata):
         data = self.read()
-        data[name] = userdata
+        data[name].update(userdata)
         self.write(data)
 
 
@@ -381,8 +440,28 @@ class User(object):
     def is_anonymous(self):
         return False
 
+    def is_admin(self):
+        return 'admin' in self.roles()
+
     def get_id(self):
         return self.name
+
+    def roles(self):
+        return self.data.get('roles')
+
+    def add_role(self, role):
+        self.data['roles'].append(role)
+        self.save()
+
+    def del_role(self, role):
+        roles = self.data.get('roles')
+        filtered_roles = filter(
+                lambda a: a != role,
+                roles)
+
+        self.data['roles'] = filtered_roles
+        self.save()
+        
 
     def check_password(self, password):
         """Return True, return False, or raise NotImplementedError if the
@@ -403,6 +482,11 @@ class User(object):
 def get_default_authentication_method():
     return app.config.get('DEFAULT_AUTHENTICATION_METHOD', 'cleartext')
 
+def get_protected_users():
+    return app.config.get('PROTECTED_USERS', [])
+
+def get_lock_role():
+    return app.config.get('LOCK_ROLE', 'editor')
 
 def make_salted_hash(password, salt=None):
     if not salt:
@@ -471,6 +555,19 @@ class LoginForm(Form):
         if not user.check_password(field.data):
             raise ValidationError('Username and password do not match.')
 
+class UserForm(Form):
+    name = TextField('', [InputRequired()])
+    password = PasswordField('', [InputRequired()])
+    is_admin = BooleanField(False, [])
+
+    def validate_name(form, field):
+        user = users.get_user(field.data)
+        if not user:
+            return True
+
+    def validate_password(form, field):
+        return field.data 
+
 
 """
     Application Setup
@@ -530,8 +627,37 @@ def index():
 @protect
 def display(url):
     page = wiki.get_or_404(url)
-    return render_template('page.html', page=page)
+    locked = wiki.is_locked(url)
+    return render_template('page.html', page=page, locked=locked)
 
+@app.route('/<path:url>/lock/')
+@protect
+def lock(url):
+    page = wiki.get_or_404(url)
+    lock_role = get_lock_role()
+
+    if lock_role in current_user.roles():
+        wiki.add_lock(url, lock_role)
+        flash('Lock added successfully', 'success')
+    else:
+        flash('You do not have rights to lock a page.', 'error')
+
+    return redirect(url_for('display', url=url))
+
+
+@app.route('/<path:url>/unlock/')
+@protect
+def unlock(url):
+    page = wiki.get_or_404(url)
+    lock_role = get_lock_role()
+
+    if lock_role in current_user.roles():
+        wiki.del_lock(url, lock_role)
+        flash('Lock removed successfully', 'success')
+    else:
+        flash('You do not have rights to unlock a page.', 'error')
+
+    return redirect(url_for('display', url=url))
 
 @app.route('/create/', methods=['GET', 'POST'])
 @protect
@@ -545,6 +671,10 @@ def create():
 @app.route('/edit/<path:url>/', methods=['GET', 'POST'])
 @protect
 def edit(url):
+    if wiki.is_locked(url):
+        if not wiki.can_edit(url, user):
+            flash('"%s" is locked.' % page.title, 'warn')
+            return redirect(url_for('display', url=url))
     page = wiki.get(url)
     form = EditorForm(obj=page)
     if form.validate_on_submit():
@@ -636,22 +766,51 @@ def user_logout():
 
 @app.route('/user/')
 def user_index():
-    pass
+    if current_user.is_anonymous() or 'admin' not in current_user.roles():
+        abort(404)
+
+    data = users.read().keys()
+    allusers = []
 
 
-@app.route('/user/create/')
+    for user in data:
+        allusers.append(users.get_user(user))
+
+    return render_template('admin/user_index.html',
+            users=allusers,
+            protected_users=get_protected_users())
+
+@app.route('/user/create/', methods=['GET','POST'])
 def user_create():
-    pass
+    form = UserForm()
 
+    if form.validate_on_submit():
+        roles = [] 
+        if form.is_admin.data:
+            roles.append('admin')
+        user = users.add_user(
+                name = form.name.data,
+                password = form.password.data,
+                active = True,
+                roles = roles,
+                authentication_method = 'hash'
+                )
+        flash('User %s created.' % (user.name,), 'success')
+        return redirect(url_for('user_index'))
 
-@app.route('/user/<int:user_id>/')
+    return render_template('admin/user_create.html', form=form)
+
+@app.route('/user/<user_id>/')
 def user_admin(user_id):
     pass
 
 
-@app.route('/user/delete/<int:user_id>/')
+@app.route('/user/delete/<user_id>/' )
 def user_delete(user_id):
-    pass
+    if users.delete_user(user_id):
+        flash('User %s deleted.' % (user_id,), 'warn')
+
+    return redirect(url_for('user_index'))
 
 
 if __name__ == '__main__':
