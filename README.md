@@ -1,9 +1,20 @@
 # Readme
 
 ## About
+From [the original repo](https://github.com/alexex/wiki):
+
 As I wanted a wiki that just uses plain markdown files as backend, that is easy
 to use and that is written in python, to enable me to easily hack around,
 but found nothing, I just wrote this down. I hope that it might help others ,too.
+
+## Underground Theater
+
+When the need for a wiki arose, this fit the bill for our size and needs and
+remains flexible to our uses.  The LICENSE remains under Alex, and upon his
+request, pull requests can be generated for any changes we make.  In the spirit
+of open source, if you wish to contribute to this project in the form of a feature
+that may be useful to others, please consider contributing to the main source tree
+instead of ours.  
 
 ## Features
 
@@ -57,6 +68,10 @@ If you want to change the overall design, you should edit `templates/base.html`
 and/or `static/bootstrap.css`. If you do not like specific parts of the site,
 it should be fairly easy to find the equivalent template and edit it.
 
-## Contributors
+## Underground Theater Contributors
+
+[tsal](/tsal)
+
+## Original Contributors
 
 Thank you very much to my two top contributers @walkerh and @traeblain. You two have posted so many issues and especially solved them with so many pull requests, that I sometimes lose track of it! :)
