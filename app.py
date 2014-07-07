@@ -284,6 +284,13 @@ class Wiki(object):
         return True
 
     def index(self, attr=None):
+        def _pathjoin(t):
+            path = ""
+            for elem in t:
+                path = os.path.join(path, elem)
+            
+            return path
+         
         def _walk(directory, path_prefix=()):
             for name in os.listdir(directory):
                 fullname = os.path.join(directory, name)
@@ -293,11 +300,12 @@ class Wiki(object):
                     if not path_prefix:
                         url = name[:-3]
                     else:
-                        url = os.path.join(path_prefix[0], name[:-3])
+                        url = os.path.join(_pathjoin(path_prefix), name[:-3])
                     if attr:
                         pages[getattr(page, attr)] = page
                     else:
                         pages.append(Page(fullname, url.replace('\\', '/')))
+
         if attr:
             pages = {}
         else:
